@@ -118,7 +118,7 @@ class RepairShopApp:
         "datetime": r"^\d{4}-\d{2}-\d{2}$",
         "part_number": r"^[\w\s.\-/]+$",
         "serial_number": r"^[\w\s.\-/]+$",
-        "boolean": r"^(True|False)$",
+        "boolean": r"^(0|1)$",
         "any": r"^.*$",
     }
 
