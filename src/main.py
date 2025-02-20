@@ -1,378 +1,29 @@
 import flet as ft
 import mysql.connector
-import Levenshtein
-import json
-import re
-import bcrypt
-from cryptography.fernet import Fernet
+
+import database
+import setting
+import config
+import tools
 
 class RepairShopApp:
 
-    theme_modes = {
-        "Светлая стандартная": ft.ThemeMode.LIGHT,
-        "Темная стандартная": ft.ThemeMode.DARK
-    }
-    themes = {
-        "Индиго": ft.Theme(
-            color_scheme_seed=ft.Colors.INDIGO,
-            use_material3=True,
-        ),
-        "Фиолетовая ночь": ft.Theme(
-            color_scheme_seed=ft.Colors.DEEP_PURPLE,
-            use_material3=True,
-        ),
-        "Лесная зелень": ft.Theme(
-            color_scheme_seed=ft.Colors.GREEN,
-            use_material3=True,
-        ),
-        "Песчаный берег": ft.Theme(
-            color_scheme_seed=ft.Colors.AMBER,
-            use_material3=True,
-        ),
-        "Лазурный бриз": ft.Theme(
-            color_scheme_seed=ft.Colors.BLUE_400,
-            use_material3=True,
-        ),
-        "Тестовый": ft.Theme(
-            color_scheme_seed=ft.Colors.random(),
-            use_material3=True
-        ),
-    }
-
-    logos_modes = {
-        "Светлая стандартная": r"source\img\logo\light_default.png",
-        "Темная стандартная": r"source\img\logo\dark_default.png"
-    }
-
-    setting_default = {
-        "app": {
-            "theme_mode": "Темная стандартная",
-            "theme": "Индиго"
-        },
-        "db": {
-            "host": "localhost",
-            "user": "User", 
-            "password": "1pq0", 
-            "database": "repair_shop"
-        }
-    }
-
-    column_names = {
-        'spare_part_id': 'ID запчасти',
-        'part_name': 'Название запчасти',
-        'description': 'Описание',
-        'manufacturer': 'Производитель',
-        'part_number': 'Номер запчасти',
-        'quantity_in_stock': 'Кол-во на складе',
-        'purchase_price': 'Цена закупки',
-        'selling_price': 'Цена продажи',
-        'compatible_devices': 'Совместимые устр.',
-        'client_id': 'ID клиента',
-        'first_name': 'Имя',
-        'last_name': 'Фамилия',
-        'phone_number': 'Номер телефона',
-        'email': 'Эл. почта',
-        'address': 'Адрес',
-        'notes': 'Заметки',
-        'order_id': 'ID заказа',
-        'device_id': 'ID устройства',
-        'employee_id': 'ID сотрудника',
-        'assigned_employee_id': 'Назнач. сотрудник',
-        'status_id': 'ID статуса',
-        'date_created': 'Дата создания',
-        'date_completed': 'Дата завершения',
-        'problem_description': 'Описание проблемы',
-        'diagnosis': 'Диагноз',
-        'total_price': 'Общая цена',
-        'quantity_used': 'Использ. кол-во',
-        'price_per_unit': 'Цена за единицу',
-        'device_type_id': 'ID типа устр.',
-        'brand': 'Бренд',
-        'model': 'Модель',
-        'serial_number': 'Серийный номер',
-        'position': 'Должность',
-        'hire_date': 'Дата найма',
-        'is_active': 'Активен',
-        'service_id': 'ID услуги',
-        'service_name': 'Название услуги',
-        'price': 'Цена',
-        'is_hardware': 'Аппаратное',
-        'type_name': 'Тип устройства',
-        'status_name': 'Название статуса',
-        'role_id': 'ID роли',
-        'role_name': 'Название роли',
-        'user_id': 'ID юзера',
-        'login': 'логин',
-        'password_hash': 'хеш пароля',
-    }
-
-    regex_patterns = {
-        "int": r"^\d+$",
-        "positive_int": r"^[1-9]\d*$",
-        "float": r"^\d+(\.\d{1,2})?$",
-        "text": r"^[\w\s.,!?\-()]+$",
-        "name": r"^[a-zA-Zа-яА-Я\s\-]+$",
-        "phone": r"^\+?\d[\d\s()\-]+$",
-        "email": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
-        "date": r"^\d{4}-\d{2}-\d{2}$",
-        "datetime": r"^\d{4}-\d{2}-\d{2}$",
-        "part_number": r"^[\w\s.\-/]+$",
-        "serial_number": r"^[\w\s.\-/]+$",
-        "boolean": r"^(0|1)$",
-        "any": r"^.*$",
-    }
-
-    column_mapping = {
-        'spare_part_id': "int",
-        'part_name': "text",
-        'description': "text",
-        'manufacturer': "text",
-        'part_number': "part_number",
-        'quantity_in_stock': "positive_int",
-        'purchase_price': "float",
-        'selling_price': "float",
-        'compatible_devices': "text",
-        'client_id': "int",
-        'first_name': "name",
-        'last_name': "name",
-        'phone_number': "phone",
-        'email': "email",
-        'address': "text",
-        'notes': "text",
-        'order_id': "int",
-        'device_id': "int",
-        'employee_id': "int",
-        'assigned_employee_id': "int",
-        'status_id': "int",
-        'date_created': "datetime",
-        'date_completed': "datetime",
-        'problem_description': "text",
-        'diagnosis': "text",
-        'total_price': "float",
-        'quantity_used': "positive_int",
-        'price_per_unit': "float",
-        'device_type_id': "int",
-        'brand': "text",
-        'model': "text",
-        'serial_number': "serial_number",
-        'position': "text",
-        'hire_date': "date",
-        'is_active': "boolean",
-        'service_id': "int",
-        'service_name': "text",
-        'price': "float",
-        'is_hardware': "boolean",
-        'type_name': "text",
-        'status_name': "text",
-        'role_id': "int",
-        'role_name': "text",
-        'user_id': "int",
-        'login': "login",
-        'password_hash': "any",
-    }
-
-    tables = {
-        "clients": {
-            "name": "Клиенты", 
-            "label_on_choose": ['first_name', 'last_name'],
-            "view_columns": "clients.client_id, clients.first_name, clients.last_name, clients.phone_number, clients.email, clients.address, clients.notes",
-            "nessesary_columns": ['first_name', 'last_name'],
-            "passed_columns": ['client_id'],
-            "join_tables": [],
-        },
-        "devices": {
-            "name": "Устройства", 
-            "label_on_choose": ['device_type_id', "serial_number"],
-            "view_columns": "devices.device_id, devices.brand, devices.model, devices.serial_number, devices.description, device_types.type_name",
-            "nessesary_columns": ['device_type_id', 'brand', 'model'],
-            "passed_columns": ['device_id'],
-            "join_tables": [{
-                    "referenced_table_name": "device_types",
-                    "referenced_column_name": "device_type_id",
-                    "column_name": "device_type_id"
-                }
-            ],
-        },
-        "device_types": {
-            "name": "Типы устройств", 
-            "label_on_choose": ['type_name'],
-            "view_columns": "device_types.device_type_id, device_types.type_name",
-            "nessesary_columns": ['type_name'],
-            "passed_columns": ['device_type_id'],
-            "join_tables": [],
-        },
-        "employees": {
-            "name": "Сотрудники", 
-            "label_on_choose": ['first_name', 'last_name'],
-            "view_columns": "employees.employee_id, employees.first_name, employees.last_name, employees.position, employees.phone_number, employees.email, employees.hire_date, employees.is_active",
-            "nessesary_columns": ['first_name', 'last_name', 'position', 'hire_date'],
-            "passed_columns": ['employee_id'],
-            "join_tables": [],
-        },
-        "order_spare_parts": {
-            "name": "Заказы запчастей", 
-            "label_on_choose": ['order_id', 'spare_part_id', 'quantity_used', 'price_per_unit'],
-            "view_columns": "order_spare_parts.order_id, order_spare_parts.spare_part_id, order_spare_parts.quantity_used, order_spare_parts.price_per_unit, spare_parts.part_name",
-            "nessesary_columns": ['order_id', 'spare_part_id', 'quantity_used', 'price_per_unit'],
-            "passed_columns": [],
-            "join_tables": [{
-                    "referenced_table_name": "spare_parts",
-                    "referenced_column_name": "spare_part_id",
-                    "column_name": "spare_part_id"
-                }
-            ],
-        },
-        "order_services": {
-            "name": "Заказы услуг", 
-            "label_on_choose": ['order_id', 'service_id', 'price'],
-            "view_columns": "order_services.order_id, order_services.service_id, order_services.price, services.service_name",
-            "nessesary_columns": ['order_id', 'service_id', 'price'],
-            "passed_columns": [],
-            "join_tables": [{
-                    "referenced_table_name": "services",
-                    "referenced_column_name": "service_id",
-                    "column_name": "service_id"
-                }
-            ],
-        },
-        "statuses": {
-            "name": "Статусы", 
-            "label_on_choose": ["status_name"],
-            "view_columns": "statuses.status_id, statuses.status_name",
-            "nessesary_columns": ['status_name'],
-            "passed_columns": ['status_id'],
-            "join_tables": [],
-        },
-        "spare_parts": {
-            "name": "Запчасти", 
-            "label_on_choose": ["spare_part_id, part_name"],
-            "view_columns": "spare_parts.spare_part_id, spare_parts.part_name, spare_parts.description, spare_parts.manufacturer, spare_parts.part_number, spare_parts.quantity_in_stock, spare_parts.purchase_price, spare_parts.selling_price, spare_parts.compatible_devices",
-            "nessesary_columns": ['part_name', 'quantity_in_stock', 'purchase_price', 'selling_price'],
-            "passed_columns": ['spare_part_id'],
-            "join_tables": [],
-        },
-        "services": {
-            "name": "Услуги", 
-            "label_on_choose": ["service_name"],
-            "view_columns": "services.service_id, services.service_name, services.description, services.price, services.is_hardware",
-            "nessesary_columns": ['service_name', 'price'],
-            "passed_columns": ['service_id'],
-            "join_tables": [],
-        },
-        "orders": {
-            "name": "Заказы", 
-            "label_on_choose": ["order_id, problem_description"],
-            "view_columns": "orders.order_id, orders.problem_description, orders.diagnosis, orders.total_price, orders.notes, clients.first_name, clients.last_name, devices.brand, devices.model, employees.first_name, employees.last_name, statuses.status_name, orders.date_created",
-            "nessesary_columns": ['client_id', 'device_id', 'employee_id', 'status_id', 'date_created', 'total_price'],
-            "passed_columns": ['order_id', 'date_created'],
-            "join_tables": [{
-                    "referenced_table_name": "clients",
-                    "referenced_column_name": "client_id",
-                    "column_name": "client_id"
-                },{
-                    "referenced_table_name": "devices",
-                    "referenced_column_name": "device_id",
-                    "column_name": "device_id"
-                },{
-                    "referenced_table_name": "employees",
-                    "referenced_column_name": "employee_id",
-                    "column_name": "employee_id"
-                },{
-                    "referenced_table_name": "statuses",
-                    "referenced_column_name": "status_id",
-                    "column_name": "status_id"
-                }
-            ],
-        },
-    }
-
-    user_role_tables = {
-        "Administrator":[
-            "clients",
-            "devices",
-            "device_types",
-            "employees",
-            "order_spare_parts",
-            "order_services",
-            "statuses",
-            "spare_parts",
-            "services",
-            "orders",
-        ],
-        "Operator":[
-            "clients",
-            "order_spare_parts",
-            "order_services",
-            "statuses",
-            "orders",
-        ],
-        "Master":[
-            "devices",
-            "statuses",
-            "spare_parts",
-            "services",
-            "orders",
-        ],
-        "Storage":[
-            "order_spare_parts",
-            "spare_parts",
-        ],
-        "Guest":[],
-    }
-
-    key = "-KlO432jG5Vm5G24X3gb-2oRX2jsVODPMjW1fu8idzw="
-    config_file = "config"
-
     def __init__(self, page: ft.Page):
         self.page = page
+        self.page.title = "DB manager"
+
+        self.setting = setting.Setting()
+        self.database = database.Database(self.setting.db)
         self.alert_dialogs_stack = []
-        self.platform = "None"
-        self.user_role = "Guest"
-        self.user = "guest"
-        self.is_connected = False
+        self.platform = None
+
         self.page.on_resized = self.detect_platform
         self.page.on_route_change = self.route_change
         self.page.on_close = self.on_close
-        self.page.title = "DB manager"
 
-        self.setting = self.load_config()
         self.set_color_theme()
-        self.connect_db(alert=False)
         self.detect_platform()
         self.page.go("/")
-
-
-    def encrypt(self, data):
-        cipher = Fernet(self.key)
-        return cipher.encrypt(json.dumps(data).encode())
-
-    def hash_password(self, password):
-        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-        return hashed_password.decode('utf-8')
-
-    def verify_password(self, stored_password, provided_password):
-        try:
-            return bcrypt.checkpw(provided_password.encode('utf-8'), stored_password.encode('utf-8'))
-        except ValueError: 
-            return False
-
-    def decrypt(self, encrypted_data):
-        cipher = Fernet(self.key)
-        return json.loads(cipher.decrypt(encrypted_data).decode())
-
-
-    def load_config(self):
-        try:
-            with open(self.config_file, "rb") as file:
-                encrypted_data = file.read()
-                return self.decrypt(encrypted_data)
-        except (FileNotFoundError, ValueError):
-            return self.setting_default
-
-    def save_config(self):
-        encrypted_data = self.encrypt(self.setting)
-        with open(self.config_file, "wb") as file:
-            file.write(encrypted_data)
 
     def alert_dialogs_stack_pop(self, e=None):
         if self.alert_dialogs_stack:
@@ -393,43 +44,26 @@ class RepairShopApp:
         self.page.open(self.alert_dialogs_stack[-1])
         self.page.update()
 
-    def connect_db(self, alert=True):
-        try:
-            self.connection = mysql.connector.connect(**self.setting["db"])
-            self.is_connected = True
-            if alert:
-                self.show_alert_dialog(content=ft.Text("Подключение успешно!"))
-        except mysql.connector.Error as err:
-            self.is_connected = False
-            self.show_alert_dialog(content=ft.Text(f"Ошибка подключения: {err}"))
-        finally:
-            self.page.update()
-
     def set_color_theme(self):
-        self.page.theme_mode = self.theme_modes[self.setting["app"]["theme_mode"]]
-        self.page.theme = self.themes[self.setting["app"]["theme"]]
+        self.page.theme_mode = config.THEME_MODES[self.setting.app["theme_mode"]]
+        self.page.theme = config.THEME_COLORS[self.setting.app["theme_color"]]
         self.border_color = ft.Colors.BLACK if self.page.theme_mode == ft.ThemeMode.LIGHT else ft.Colors.WHITE
         self.page.update()
 
     def route_change(self, e):
-        rest = ["", "setting", "loggin"]
+        self.set_color_theme()
         self.page.views.clear()
-        if self.page.route[1:] in self.user_role_tables[self.user_role] + rest:
-            template_view = self.routing_map.get(self.page.route)
+        if self.page.route in setting.AVAILABLE_ROUTES[self.setting.right]:
+            route = self.page.route
         else:
-            template_view = self.routing_map.get("/")
+            route = "/"
 
-        if self.page.theme_mode != self.theme_modes[self.setting["app"]["theme_mode"]] or self.page.theme != self.themes[self.setting["app"]["theme"]]:
-            self.set_color_theme()
-
-        if template_view:
-            view = template_view["view"]
-            view.controls = [template_view["function"](self)]
-            self.page.views.append(view)
-            self.page.update()
-        else:
-            self.page.go("/")
-
+        template_view = self.routing_map.get(route)
+        view = template_view["view"]
+        view.controls = [template_view["function"](self)]
+        self.page.views.append(view)
+        tools.logger.info(f"Переход по маршруту {route}")
+        self.page.update()
 
     def detect_platform(self, e=None): 
         window_width = self.page.window.width or 0
@@ -441,217 +75,30 @@ class RepairShopApp:
             platform = "desktop"
 
         if self.platform != platform:
+            tools.logger.info(f"Платформа изменена {platform}")
             self.platform = platform
             self.update_views()
 
     def update_views(self):
         if self.page.views:
-          self.route_change(None)
-
-    def get_table_rows(self, table_name, columns_str="*", join_tables=[]):
-        data = []
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            query = f"""
-            SELECT {columns_str}
-            FROM {table_name}
-            """
-            if join_tables:
-                for join_table in join_tables:
-                    query += f"""
-                    JOIN {join_table['referenced_table_name']} 
-                    ON {join_table['referenced_table_name']}.{join_table['referenced_column_name']} = 
-                       {table_name}.{join_table['column_name']}
-                    """
-            cursor.execute(query)
-            data = cursor.fetchall()
-        except mysql.connector.Error as err:
-            self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
-        finally:
-            if 'cursor' in locals() and cursor:
-                cursor.close()
-            return data
-
-    def get_unique_columns(self, table_name):
-        data = []
-        errors = []
-        try:
-            cursor = self.connection.cursor()
-            query = """
-            SELECT
-            COLUMN_NAME as column_name
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_NAME = %s
-              AND COLUMN_KEY IN ('UNI');
-            """
-            cursor.execute(query, (table_name,))
-            data = list(cursor.fetchall()[0])
-        except mysql.connector.Error as err:
-            self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
-            errors.append("Error")
-        finally:
-            if 'cursor' in locals() and cursor:
-                cursor.close()
-            return errors, data
-
-    def get_primary_columns(self, table_name):
-        data = []
-        errors = []
-        try:
-            cursor = self.connection.cursor()
-            query = """
-            SELECT
-            COLUMN_NAME as column_name
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_NAME = %s
-              AND COLUMN_KEY IN ('PRI');
-            """
-            cursor.execute(query, (table_name,))
-            data = list(cursor.fetchall()[0])
-        except mysql.connector.Error as err:
-            self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
-            errors.append("Error")
-        finally:
-            if 'cursor' in locals() and cursor:
-                cursor.close()
-            return errors, data
-
-    def get_referenced_row_rows(self, table_name, row):
-        data = []
-        errors, table_row_dependens = self.get_table_row_dependens(table_name)
-        if not errors:
-            for table_row_dependen in table_row_dependens:
-                referenced_rows = table_row_dependen["referenced_table_rows"]
-                referenced_column_name = table_row_dependen["referenced_column_name"]
-                column_name = table_row_dependen["column_name"]
-                referenced_table_rows = []
-                for referenced_row in referenced_rows:
-                    if referenced_row[referenced_column_name] == row[column_name]:
-                        referenced_table_rows.append(referenced_row)
-                data.append({
-                    "referenced_table_name": table_row_dependen["referenced_table_name"],
-                    "referenced_table_rows": referenced_table_rows,
-                    "referenced_column_name": referenced_column_name,
-                    "table_name": table_row_dependen["table_name"],
-                    "column_name": column_name,
-                })
-        return errors, data
-
-    def get_table_row_dependens(self, table_name):
-        data = []
-        errors = []
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            query = """
-            SELECT     
-                REFERENCED_TABLE_NAME AS referenced_table_name,
-                REFERENCED_COLUMN_NAME AS referenced_column_name,
-                TABLE_NAME AS table_name,
-                COLUMN_NAME AS column_name
-            FROM 
-                INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-            WHERE 
-                TABLE_NAME = %s
-                AND REFERENCED_TABLE_NAME IS NOT NULL;
-            """
-            cursor.execute(query, (table_name,))
-            temp = cursor.fetchall()
-            for row in temp:
-                temp_query = """
-                SELECT
-                    *
-                FROM
-                    %s
-                """
-                cursor.execute(temp_query, (row['referenced_table_name'],))
-                data.append({
-                        "referenced_table_name": row['referenced_table_name'],
-                        "referenced_table_rows": cursor.fetchall(),
-                        "referenced_column_name": row['referenced_column_name'],
-                        "table_name": row['table_name'],
-                        "column_name": row['column_name'],
-                    }
-                )
-        except mysql.connector.Error as err:
-            self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
-            errors.append("Error")
-        finally:
-            if 'cursor' in locals() and cursor:
-                cursor.close()
-            return errors, data
-
-    def add_table_row(self, table_name, row):
-        errors = []
-        try:
-            cursor = self.connection.cursor()
-            columns = ", ".join(row.keys())
-            placeholders = ", ".join(["%s"] * len(row))
-            values = list(row.values())
-            query = f"""
-            INSERT INTO {table_name} ({columns})
-            VALUES ({placeholders})
-            """
-            cursor.execute(query, values)
-            self.connection.commit()
-        except mysql.connector.Error as err:
-            self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
-            errors.append("Error")
-        finally:
-            if 'cursor' in locals() and cursor:
-                cursor.close()
-            return errors
-
-    def update_table_row(self, table_name, row):
-        errors = []
-        try:
-            error, primary_columns = self.get_primary_columns(table_name)
-            cursor = self.connection.cursor()
-            if not error:
-                set_row = ", ".join([f"{key} = %s" for key in row.keys() if key not in primary_columns])
-                where_clause = " AND ".join([f"{key} = %s" for key in primary_columns])
-                query = f"""
-                UPDATE {table_name}
-                SET {set_row}
-                WHERE {where_clause}
-                """
-                values = [row[key] for key in row.keys() if key not in primary_columns] + [row[key] for key in primary_columns]
-                cursor.execute(query, values)
-                self.connection.commit()
-        except mysql.connector.Error as err:
-            self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
-            errors.extend(error)
-            errors.append("Error")
-        finally:
-            if 'cursor' in locals() and cursor:
-                cursor.close()
-            return errors
-
-    def delete_table_rows(self, table_name, row):
-        errors = []
-        try:
-            error, primary_columns = self.get_primary_columns(table_name)
-            cursor = self.connection.cursor()
-            if not error:
-                where_clause = " AND ".join([f"{key} = %s" for key in primary_columns])
-                query = f"""
-                DELETE FROM {table_name}
-                WHERE {where_clause}
-                """
-                values = [row[key] for key in primary_columns]
-                cursor.execute(query, values)
-                self.connection.commit()
-        except mysql.connector.Error as err:
-            self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
-            errors.extend(error)
-            errors.append("Error")
-        finally:
-            if 'cursor' in locals() and cursor:
-                cursor.close()
-            return errors
+            self.route_change(None)
 
     def home_view(self):
-        def on_menu_click(e):
-            self.page.go(f"/{e.control.data}")
+        def reconnect(e=None):
+            self.database.connect(self.setting.db)
+            if self.database.is_connected:
+                status_row.controls = [
+                    ft.Text("Статус: Подключенно"),
+                    ft.IconButton(icon=ft.Icons.REFRESH, on_click=reconnect),
+                ]
+            else:
+                status_row.controls = [
+                    ft.Text("Статус: Не подключенно"),                    
+                    ft.IconButton(icon=ft.Icons.REFRESH, on_click=reconnect),
+                ]
+            self.page.update()
+        def on_menu_click(e=None):
+            self.page.go(f"/tables/{e.control.data}")
 
         all_items = {
             "clients": ft.PopupMenuItem(data="clients", text="Клиенты", on_click=on_menu_click),
@@ -665,8 +112,23 @@ class RepairShopApp:
             "services": ft.PopupMenuItem(data="services", text="Услуги", on_click=on_menu_click),
             "orders": ft.PopupMenuItem(data="orders", text="Заказы", on_click=on_menu_click),
         }
-        items = [all_items[table_name] for table_name in self.user_role_tables[self.user_role]]
-        status_text = "Подключенно" if self.is_connected else "Не подключенно"
+        items = [all_items[table_name] for table_name in setting.AVAILABLE_TABLES[self.setting.right]]
+        if self.database.is_connected:
+            status_row = ft.Row([
+                    ft.Text("Статус: Подключенно"),
+                    ft.IconButton(icon=ft.Icons.REFRESH, on_click=reconnect),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        else:
+            status_row = ft.Row([
+                    ft.Text("Статус: Не подключенно"),
+                    ft.IconButton(icon=ft.Icons.REFRESH, on_click=reconnect),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+            )
 
         if self.platform == "phone":
             main_window = ft.Column([
@@ -687,13 +149,13 @@ class RepairShopApp:
                                 ),
                                 border=ft.border.only(bottom=ft.BorderSide(1, self.border_color))
                             ),
-                            ft.Text(f"Статус: {status_text}"),
+                            status_row,
                         ],
                         alignment=ft.MainAxisAlignment.START,
                     ),
                     ft.Container(
                         content=ft.Image(
-                            src=self.logos_modes[self.setting["app"]["theme_mode"]],
+                            src=config.THEME_LOGOS[self.setting.app["theme_mode"]],
                             width=400,
                             fit=ft.ImageFit.CONTAIN,
                         ),
@@ -726,13 +188,13 @@ class RepairShopApp:
                                 ),
                                 border=ft.border.only(bottom=ft.BorderSide(1, self.border_color))
                             ),
-                            ft.Text(f"Статус: {status_text}"),
+                            status_row,
                         ],
                         alignment=ft.MainAxisAlignment.START,
                     ),
                     ft.Container(
                         content=ft.Image(
-                            src=self.logos_modes[self.setting["app"]["theme_mode"]],
+                            src=config.THEME_LOGOS[self.setting.app["theme_mode"]],
                             width=550,
                             fit=ft.ImageFit.CONTAIN,
                         ),
@@ -752,51 +214,40 @@ class RepairShopApp:
             )
         else:
             self.detect_platform()
-            self.home_view()
+            self.page.go("/")
 
         return main_window
 
     def loggin_view(self):
         def submit(e):
-            pattern_loggin = r"^[a-zA-Z][a-zA-Z0-9_]{3,19}$"
-            pattern_password = r"[a-zA-Z0-9@#$%^&+=!]{8,30}$"
-            if bool(re.fullmatch(pattern_loggin, field_loggin.value)) and bool(re.fullmatch(pattern_password, field_password.value)):
+            loggin = loggin_field.value.strip()
+            password = password_field.value.strip()
+            if tools.regex.is_match("loggin", loggin) and tools.regex.is_match("password", password):
                 try:
-                    cursor = self.connection.cursor()
-                    query = """
-                    SELECT role_name, password_hash FROM users
-                        JOIN roles ON users.user_id = roles.role_id
-                        WHERE login = %s;
-                    """
-                    value = (field_loggin.value,)
-                    cursor.execute(query, value)
-                    results = cursor.fetchone()
-                    if results and self.verify_password(results[1], field_password.value):
-                        self.user_role = results[0]
-                        self.user = field_loggin.value
+                    results = self.database.manager.get_user(loggin)
+                    if results and tools.password.verify_password(results[1], password):
+                        self.setting.right = results[0]
+                        self.setting.user = loggin
                         self.page.go("/")
-                        self.show_alert_dialog(content=ft.Text(f"Здравствуйте, {field_loggin.value}"))
+                        self.show_alert_dialog(content=ft.Text(f"Здравствуйте, {loggin}"))
                     else:
                         self.show_alert_dialog(content=ft.Text("Неправильные пароль или логин"))
                 except mysql.connector.Error as err:
                     self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
-                finally:
-                    if 'cursor' in locals() and cursor:
-                        cursor.close()
             else:
                 self.show_alert_dialog(content=ft.Text("Некоректно введен пароль или логин"))
             self.page.update()
 
         def on_change_field(e):
-            if field_loggin.value and field_password.value:
-                button_loggin.disabled=False
+            if loggin_field.value and password_field.value:
+                loggin_button.disabled=False
             else:
-                button_loggin.disabled=True
+                loggin_button.disabled=True
             self.page.update()
 
-        field_loggin = ft.TextField(label = "Логин", on_change=on_change_field)
-        field_password = ft.TextField(label = "Пароль", on_change=on_change_field, password=True, can_reveal_password=True)
-        button_loggin = ft.ElevatedButton(text="Войти", on_click=submit, disabled=True)
+        loggin_field = ft.TextField(label = "Логин", on_change=on_change_field)
+        password_field = ft.TextField(label = "Пароль", on_change=on_change_field, password=True, can_reveal_password=True)
+        loggin_button = ft.ElevatedButton(text="Войти", on_click=submit, disabled=True)
         
         if self.platform == "phone":
             main_window = ft.Column([
@@ -804,8 +255,8 @@ class RepairShopApp:
                     ft.Row([
                             ft.Column([
                                     ft.Text("Авторизация"),
-                                    field_loggin,
-                                    field_password,
+                                    loggin_field,
+                                    password_field,
                                     ft.Row([                            
                                         ft.ElevatedButton(text="Войти", on_click=submit),
                                         ],
@@ -832,8 +283,8 @@ class RepairShopApp:
                     ft.Row([
                             ft.Column([
                                     ft.Text("Авторизация"),
-                                    field_loggin,
-                                    field_password,
+                                    loggin_field,
+                                    password_field,
                                     ft.Row([
                                         ft.ElevatedButton(text="Назад", on_click=lambda _: self.page.go("/")),
                                         ft.ElevatedButton(text="Войти", on_click=submit),
@@ -841,7 +292,7 @@ class RepairShopApp:
                                         alignment = ft.MainAxisAlignment.SPACE_BETWEEN,
                                     ),
                                 ],
-                                width = 300,
+                                width = 400,
                                 alignment = ft.MainAxisAlignment.CENTER,
                                 horizontal_alignment = ft.CrossAxisAlignment.CENTER,
                             ),
@@ -857,7 +308,7 @@ class RepairShopApp:
             )
         else:
             self.detect_platform()
-            self.home_view()
+            self.page.go("/")
 
         return main_window
 
@@ -869,9 +320,9 @@ class RepairShopApp:
                 button_connect.disabled=True
             self.page.update()
 
-        def on_change_dropdown(e=None):            
-            self.page.theme_mode = self.theme_modes[th_m_drop.value]
-            self.page.theme = self.themes[th_c_drop.value]
+        def on_change_dropdown(e=None):
+            self.page.theme_mode = config.THEME_MODES[th_m_drop.value]
+            self.page.theme = config.THEME_COLORS[th_c_drop.value]
             self.page.update()
 
         def on_click_connect(e=None):
@@ -881,26 +332,21 @@ class RepairShopApp:
                 "password": pw_field.value,
                 "database": db_field.value
             }
-            try:
-                self.connection = mysql.connector.connect(**setting)
-                self.is_connected = True
+            self.database.connect(setting)
+            if self.database.is_connected:
                 self.show_alert_dialog(content=ft.Text("Подключение успешно!"))
-            except mysql.connector.Error as err:
-                self.is_connected = False
-                self.show_alert_dialog(content=ft.Text(f"Ошибка подключения: {err}"))
-            finally:
-                self.page.update()
-        
-        def on_click_save(e=None):            
-            self.setting["app"]["theme_mode"] = th_m_drop.value
-            self.setting["app"]["theme"] = th_c_drop.value
-            self.set_color_theme()
-            self.setting["db"]["host"] = host_field.value
-            self.setting["user"] = user_field.value
-            self.setting["password"] = pw_field.value
-            self.setting["database"] = db_field.value
-            self.connect_db(alert=False)
-            self.save_config()
+            else:
+                self.show_alert_dialog(content=ft.Text(f"Ошибка подключения."))
+
+        def on_click_save(e=None):
+            self.setting.app["theme_mode"] = th_m_drop.value
+            self.setting.app["theme_color"] = th_c_drop.value
+            self.setting.db["host"] = host_field.value
+            self.setting.db["user"] = user_field.value
+            self.setting.db["password"] = pw_field.value
+            self.setting.db["database"] = db_field.value
+            self.database.connect(self.setting.db)
+            self.setting.save_config()
             self.page.go("/")
         
         host_field = ft.TextField(label = "Host", on_change=on_change_field)
@@ -908,24 +354,24 @@ class RepairShopApp:
         pw_field = ft.TextField(label = "Password", on_change=on_change_field, password=True, can_reveal_password=True)
         db_field = ft.TextField(label = "Database", on_change=on_change_field)
         
-        host_field.value=self.setting["db"]["host"]
-        user_field.value=self.setting["db"]["user"]
-        db_field.value=self.setting["db"]["database"]
+        host_field.value=self.setting.db["host"]
+        user_field.value=self.setting.db["user"]
+        db_field.value=self.setting.db["database"]
         
         th_m_drop = ft.Dropdown(
             label="Тема",
-            options=[ft.dropdown.Option(key) for key in self.theme_modes.keys()],
+            options=[ft.dropdown.Option(key) for key in config.THEME_MODES.keys()],
             on_change=on_change_dropdown,
-            value=self.setting["app"]["theme_mode"],
+            value=self.setting.app["theme_mode"],
         )
         th_c_drop = ft.Dropdown(
             label="Цвет",
-            options=[ft.dropdown.Option(key) for key in self.themes.keys()],
+            options=[ft.dropdown.Option(key) for key in config.THEME_COLORS.keys()],
             on_change=on_change_dropdown,
-            value=self.setting["app"]["theme"],
+            value=self.setting.app["theme_color"],
         )
         
-        button_connect = ft.ElevatedButton(text="Подключиться", on_click=on_click_connect)        
+        button_connect = ft.ElevatedButton(text="Подключиться", on_click=on_click_connect)
         button_save = ft.ElevatedButton(text="Сохранить", on_click=on_click_save)
         on_change_field()
         if self.platform == "phone":
@@ -1018,11 +464,79 @@ class RepairShopApp:
             )
         else:
             self.detect_platform()
-            self.home_view()
+            self.page.go("/")
 
         return main_window
 
     def table_view(self, table_name):
+        def check_row_values(content):
+            controls = content.controls
+            nessesary_columns_list = list(database.TABLES[table_name]["nessesary_columns"])
+            for control in controls:
+                if control.data in nessesary_columns_list:
+                    if control.value:
+                        nessesary_columns_list.remove(control.data)
+                if control.error_text:
+                    return False
+            return not bool(nessesary_columns_list)
+        def check_value(e=None):
+            value = e.control.value
+            column_name = e.control.data
+            pattern_type = database.COLUMN_MAPPING[column_name]
+            if value:
+                if tools.regex.is_match(pattern_type, value):
+                    e.control.error_text = None
+                else:
+                    e.control.error_text = "Поле заполнено не правильно"
+            else:
+                e.control.error_text = "Данное поле нужно заполнить"
+            self.page.update()
+        def error_empty(content):
+            controls = content.controls
+            nessesary_columns_list = list(database.TABLES[table_name]["nessesary_columns"])
+            for control in controls:
+                if control.data in nessesary_columns_list:
+                    if not control.value:
+                        control.error_text = "Данное поле нужно заполнить"
+            self.page.update()
+        def action_button_click(e=None, action=lambda _d, _c: None):
+            dialog = e.control.parent
+            text = e.control.text
+            content = dialog.content
+            if text == "Отмена":
+                self.page.close(dialog)
+            else:
+                action(dialog, content)
+            self.page.update()
+        def create_controls(row, table_column_names, table_row_dependens, primary_columns=[]):
+            controls = []
+            for table_column_name in table_column_names:
+                control = None
+                is_disabled = table_column_name in primary_columns
+                for table_row_dependen in table_row_dependens:
+                    if table_column_name in table_row_dependen["column_name"]:
+                        options = []
+                        for referenced_table_row in table_row_dependen["referenced_table_rows"]:
+                            options.append(ft.dropdown.Option(
+                                    key=str(referenced_table_row[table_row_dependen["referenced_column_name"]]),
+                                    text=" ".join([str(referenced_table_row[column_name]) for column_name in database.TABLES[table_row_dependen['referenced_table_name']]["label_on_choose"]])
+                                )
+                            )
+                        control = ft.Dropdown(options=options)
+                if not control:
+                    control=ft.TextField()
+                control.data = table_column_name
+                control.label = database.COLUMN_NAMES[table_column_name]
+                control.on_change = check_value
+                control.disabled = is_disabled
+                if row:
+                    control.value=row[table_column_name]
+                if control:
+                    if control.data in database.TABLES[table_name]["nessesary_columns"]:
+                        control.label = control.label+'*'
+                    controls.append(control)
+            return controls
+
         def create_table(table_name, table_rows):
             table_container_in = ft.Row()
             if table_rows:
@@ -1030,7 +544,7 @@ class RepairShopApp:
                     main_table_container_in.scroll_to(offset=e.pixels, delta=e.scroll_delta, duration=0)
 
                 main_columns = [
-                    ft.DataColumn(ft.Text(self.column_names[key])) for key in table_rows[0].keys()
+                    ft.DataColumn(ft.Text(database.COLUMN_NAMES[key])) for key in table_rows[0].keys()
                 ]
                 last_column = [
                     ft.DataColumn(ft.Text("Действия"))
@@ -1058,22 +572,6 @@ class RepairShopApp:
                             ]
                         )
                     )
-                main_rows.append(
-                    ft.DataRow(
-                        cells=[
-                            ft.DataCell(ft.IconButton(icon=ft.Icons.ADD, on_click=add_note))
-                        ]+[
-                            ft.DataCell(ft.Text()) for _ in range(len(table_rows[0])-1)
-                        ]
-                    )
-                )
-                last_rows.append(
-                    ft.DataRow(
-                        cells=[
-                            ft.DataCell(ft.Text())
-                        ]
-                    )
-                )
                 main_table = ft.DataTable(
                     columns=main_columns,
                     rows=main_rows,
@@ -1133,258 +631,122 @@ class RepairShopApp:
                     for cell in main_row.cells:
                         match = False
                         value = str(cell.content.value).lower()
-                        if (Levenshtein.ratio(query, value) >= 0.7) or (query in value):
+                        if tools.search.is_perhabs_match(query, value):
                             match = True
                             break
                     if not match:
                         main_row.visible = False
                         last_row.visible = False
             self.page.update()
-
         def add_note(e=None):
-            def create_row(content):
+            def action(dialog, content):
+                is_checked = check_row_values(content)
+                if is_checked:
+                    new_row = get_row(content)
+                    self.database.manager.add_table_row(table_name, new_row)
+                    self.page.close(dialog)
+                else:
+                    error_empty(content)
+            def get_row(content):
                 controls = content.controls
                 adding_row = {control.data:control.value for control in controls}
                 return adding_row
-            def check_row_values(content):
-                controls = content.controls
-                nessesary_columns_list = list(self.tables[table_name]["nessesary_columns"])
-                have_wrong = False
-                for control in controls:
-                    if control.data in nessesary_columns_list:
-                        if control.value:
-                            nessesary_columns_list.remove(control.data)
-                    if control.error_text:
-                        return False
-                return not bool(nessesary_columns_list)
-            def check_value(e=None):
-                value = e.control.value
-                column_name = e.control.data
-                pattern = self.regex_patterns[self.column_mapping[column_name]]
-                if value:
-                    if re.match(pattern, value, re.IGNORECASE):
-                        e.control.error_text = None
-                    else:
-                        e.control.error_text = "Поле заполнено не правильно"
-                else:
-                    e.control.error_text = "Данное поле нужно заполнить"
-                self.page.update()
-            def set_nesserary_empty():
-                controls = content.controls
-                nessesary_columns_list = list(self.tables[table_name]["nessesary_columns"])
-                for control in controls:
-                    if control.data in nessesary_columns_list:
-                        if not control.value:
-                            control.error_text = "Данное поле нужно заполнить"
-                self.page.update()
-            def action_button_click(e=None):
-                dialog = e.control.parent
-                text = e.control.text
-                if text == "Отмена":
-                    self.page.close(dialog)
-                else:
-                    is_checked = check_row_values(content)
-                    if is_checked:
-                        adding_row = create_row(content)
-                        error = self.add_table_row(table_name, adding_row)
-                        self.page.close(dialog)
-                        if not error:
-                            self.show_alert_dialog(content=ft.Text("Успех!"))
-                    else:
-                        set_nesserary_empty()
-                self.page.update()
-
             content = ft.Column(
                 scroll=ft.ScrollMode.AUTO,
                 expand = True,
             )
             actions = [
-                ft.TextButton("Отмена", on_click=action_button_click),
-                ft.TextButton("Применить", on_click=action_button_click),
+                ft.TextButton("Отмена", on_click=lambda e, a=action: action_button_click(e, a)),
+                ft.TextButton("Применить", on_click=lambda e, a=action: action_button_click(e, a)),
             ]
             
-            table_column_names = [column_name for column_name in self.get_table_rows(table_name)[0].keys() if not column_name in self.tables[table_name]["passed_columns"]]
-            errors, table_row_dependens = self.get_table_row_dependens(table_name)
-            if not errors:
-                for table_column_name in table_column_names:
-                    control = None
-                    for table_row_dependen in table_row_dependens:
-                        if table_column_name in table_row_dependen["column_name"]:
-                            options = []
-                            for referenced_table_row in table_row_dependen["referenced_table_rows"]:
-                                options.append(ft.dropdown.Option(
-                                        key=str(referenced_table_row[table_row_dependen["referenced_column_name"]]),
-                                        text=" ".join([str(referenced_table_row[column_name]) for column_name in self.tables[table_row_dependen['referenced_table_name']]["label_on_choose"]])
-                                    )
-                                )
-                            control = ft.Dropdown(
-                                data=table_column_name,
-                                label=self.column_names[table_column_name],
-                                options=options,
-                                on_change=check_value,
-                            )
-                    if not control:
-                        control=ft.TextField(
-                            data=table_column_name,
-                            label=self.column_names[table_column_name],
-                            on_change=check_value,
-                        )
-                    if control:
-                        if control.data in self.tables[table_name]["nessesary_columns"]:
-                            control.label = control.label+'*'
-                        content.controls.append(control)
+            try:
+                table_column_names = []
+                for column_name in self.database.manager.get_table_rows(table_name)[0].keys():
+                    if column_name not in database.TABLES[table_name]["passed_columns"]:
+                        table_column_names.append(column_name)
+                table_row_dependens = self.database.manager.get_table_row_dependens(table_name)
+                controls = create_controls([], table_column_names, table_row_dependens)
+                content.controls.extend(controls)
 
                 self.show_alert_dialog(title="Добавить", content=content, actions=actions, modal=True)
-            update()
+                update()
+            except mysql.connector.Error as err:
+                self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
         def delete_row(e=None,table_name=None, row=None):
-            errors, referenced_row_rows = self.get_referenced_row_rows(table_name, row)
-            if referenced_row_rows:
-                if self.user_role == "Administrator":
-                    def action_button_click(e=None):
-                        dialog = e.control.parent
-                        self.page.close(dialog)
-                    content = ft.Column(
-                        scroll=ft.ScrollMode.AUTO,
-                        expand = True,
-                    )
-                    actions = [
-                        ft.TextButton("Отмена", on_click=action_button_click),
-                    ]
-                    for referenced_row_row in referenced_row_rows:
-                        referenced_table_name = referenced_row_row["referenced_table_name"]
-                        referenced_table_rows = referenced_row_row["referenced_table_rows"]
-                        content.controls.append(create_table(referenced_table_name, referenced_table_rows))
-                    self.show_alert_dialog(title="Удаление", content=content, actions=actions, modal=True)
-                else:
-                    def action_button_click(e=None):
-                        dialog = e.control.parent
-                        self.page.close(dialog)
-                    actions = [
-                        ft.TextButton("Отмена", on_click=action_button_click),
-                    ]
-                    self.show_alert_dialog(title="Удаление", content=ft.Text("Есть зависимые записи. Удаление не возможно!"), actions=actions, modal=True)
-            else:
-                errors = self.delete_table_rows(table_name, row)
-                if not errors:
-                    self.show_alert_dialog(content=ft.Text("Успех!"))
-            update()
-        def change_row(e=None,table_name=None, row=None):
-            def create_row(content):
-                controls = content.controls
-                updating_row = row.copy()
-                for control in controls:
-                    updating_row[control.data] = control.value
-                return updating_row
-            def check_row_values(content):
-                controls = content.controls
-                nessesary_columns_list = list(self.tables[table_name]["nessesary_columns"])
-                have_wrong = False
-                for control in controls:
-                    if control.data in nessesary_columns_list:
-                        if control.value:
-                            nessesary_columns_list.remove(control.data)
-                    if control.error_text:
-                        return False
-                return not bool(nessesary_columns_list)
-            def check_value(e=None):
-                value = e.control.value
-                column_name = e.control.data
-                pattern = self.regex_patterns[self.column_mapping[column_name]]
-                if value:
-                    if re.match(pattern, value, re.IGNORECASE):
-                        e.control.error_text = None
+            try:
+                referenced_row_rows = self.database.manager.get_referenced_row_rows(table_name, row)
+                if referenced_row_rows:
+                    if self.settin.right == "Administrator":
+                        actions = [
+                            ft.TextButton("Отмена", on_click=action_button_click),
+                        ]
+                        for referenced_row_row in referenced_row_rows:
+                            referenced_table_name = referenced_row_row["referenced_table_name"]
+                            referenced_table_rows = referenced_row_row["referenced_table_rows"]
+                            content.controls.append(create_table(referenced_table_name, referenced_table_rows))
+                        self.show_alert_dialog(title="Удаление", content=content, actions=actions, modal=True)
                     else:
-                        e.control.error_text = "Поле заполнено не правильно"
+                        actions = [
+                            ft.TextButton("Отмена", on_click=action_button_click),
+                        ]
+                        self.show_alert_dialog(title="Удаление", content=ft.Text("Есть зависимые записи. Удаление не возможно!"), actions=actions, modal=True)
                 else:
-                    e.control.error_text = "Данное поле нужно заполнить"
-                self.page.update()
-            def set_empty_error_text():
-                controls = content.controls[1].controls
-                nessesary_columns_list = list(self.tables[table_name]["nessesary_columns"])
-                for control in controls:
-                    if control.data in nessesary_columns_list:
-                        if not control.value:
-                            control.error_text = "Данное поле нужно заполнить"
-                self.page.update()
-            def action_button_click(e=None):
-                dialog = e.control.parent
-                text = e.control.text
-                if text == "Отмена":
+                    self.database.manager.delete_table_rows(table_name, row)
+                update()
+            except mysql.connector.Error as err:
+                self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
+        def change_row(e=None,table_name=None, row=None):
+            def action(dialog, content):
+                is_checked = check_row_values(content)
+                if is_checked:
+                    new_row = get_row(content, row)
+                    self.database.manager.update_table_row(table_name, new_row)
                     self.page.close(dialog)
                 else:
-                    is_checked = check_row_values(content)
-                    if is_checked:
-                        updating_row = create_row(content)
-                        error = self.update_table_row(table_name, updating_row)
-                        self.page.close(dialog)
-                        if not error:
-                            self.show_alert_dialog(content=ft.Text("Успех!"))
-                    else:
-                        set_empty_error_text()
-                self.page.update()
+                    error_empty(content)
+            def get_row(content, row):
+                controls = content.controls
+                new_row = row.copy()
+                for control in controls:
+                    new_row[control.data] = control.value
+                return row
 
             content = ft.Column(
                 scroll=ft.ScrollMode.AUTO,
                 expand = True,
             )
             actions = [
-                ft.TextButton("Отмена", on_click=action_button_click),
-                ft.TextButton("Применить", on_click=action_button_click),
+                ft.TextButton("Отмена", on_click=lambda e, a=action: action_button_click(e, a)),
+                ft.TextButton("Применить", on_click=lambda e, a=action: action_button_click(e, a)),
             ]
-            
-            table_column_names = [column_name for column_name in self.get_table_rows(table_name)[0].keys() if not column_name in self.tables[table_name]["passed_columns"]]
-            errors1, primary_columns = self.get_primary_columns(table_name)
-            errors2, unique_columns = self.get_unique_columns(table_name)
-            errors = errors1 + errors2
-            all_unique_columns = primary_columns + unique_columns 
-            errors, table_row_dependens = self.get_table_row_dependens(table_name)
-            if not errors:
-                for table_column_name in table_column_names:
-                    control = None
-                    is_disabled = table_column_name in all_unique_columns
-                    for table_row_dependen in table_row_dependens:
-                        if table_column_name in table_row_dependen["column_name"]:
-                            options = []
-                            for referenced_table_row in table_row_dependen["referenced_table_rows"]:
-                                options.append(ft.dropdown.Option(
-                                        key=str(referenced_table_row[table_row_dependen["referenced_column_name"]]),
-                                        text=" ".join([str(referenced_table_row[column_name]) for column_name in self.tables[table_row_dependen['referenced_table_name']]["label_on_choose"]])
-                                    )
-                                )
-                            control = ft.Dropdown(
-                                data=table_column_name,
-                                label=self.column_names[table_column_name],
-                                options=options,
-                                on_change=check_value,
-                                value=row[table_column_name],
-                                disabled = is_disabled,
-                            )
-                    if not control:
-                        control=ft.TextField(
-                            data=table_column_name,
-                            label=self.column_names[table_column_name],
-                            on_change=check_value,
-                            value=row[table_column_name],
-                            disabled = is_disabled,
-                        )
-                    if control:
-                        if control.data in self.tables[table_name]["nessesary_columns"]:
-                            control.label = control.label+'*'
-                        content.controls.append(control)
+            try:
+                table_column_names = []
+                for column_name in self.database.manager.get_table_rows(table_name)[0].keys():
+                    table_column_names.append(column_name)
+                primary_columns = self.database.manager.get_primary_columns(table_name)
+                table_row_dependens = self.database.manager.get_table_row_dependens(table_name)
+                controls = create_controls(row, table_column_names, table_row_dependens, primary_columns)
+                content.controls.extend(controls)
 
                 self.show_alert_dialog(title="Обновить", content=content, actions=actions, modal=True)
-            update()
+                update()
+            except mysql.connector.Error as err:
+                self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
         def update(e=None):
-            table_rows = self.get_table_rows(
-                table_name, self.tables[table_name]["view_columns"],
-                self.tables[table_name]["join_tables"]
-            )
-            table_container_out.controls=[create_table(table_name, table_rows)]
-            self.page.update()
+            try:
+                table_rows = self.database.manager.get_table_rows(
+                    table_name, database.TABLES[table_name]["view_columns"],
+                    database.TABLES[table_name]["join_tables"]
+                )
+                table_container_out.controls=[create_table(table_name, table_rows)]
+                self.page.update()
+            except mysql.connector.Error as err:
+                self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
             
-        table_rows = self.get_table_rows(
-            table_name, self.tables[table_name]["view_columns"],
-            self.tables[table_name]["join_tables"]
+        table_rows = self.database.manager.get_table_rows(
+            table_name, database.TABLES[table_name]["view_columns"],
+            database.TABLES[table_name]["join_tables"]
         )
         table_container_out=ft.Column(
             controls=[create_table(table_name, table_rows)],
@@ -1394,12 +756,13 @@ class RepairShopApp:
         )
         search_field = ft.TextField(label = "Поиск", on_change = search_data)
         if self.platform == "phone":
+            table_container_out.controls.append(ft.IconButton(icon=ft.Icons.ADD, on_click=add_note))
             search_field.expand = True
             main_window = ft.Column([
                 ft.Container(
                     content = ft.Row([
                             ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.page.go("/")),
-                            ft.Text(self.tables[table_name]["name"])
+                            ft.Text(database.TABLES[table_name]["name"])
                         ],
                         alignment = ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
@@ -1424,7 +787,7 @@ class RepairShopApp:
                         ft.Container(
                             content = ft.Row([
                                     ft.TextButton(text="Назад", on_click=lambda _: self.page.go("/")),
-                                    ft.Text(self.tables[table_name]["name"])
+                                    ft.Text(database.TABLES[table_name]["name"])
                                 ],
                                 alignment = ft.MainAxisAlignment.SPACE_BETWEEN,
                             ),
@@ -1433,6 +796,7 @@ class RepairShopApp:
                         ft.Row([
                                 search_field,
                                 ft.IconButton(icon=ft.Icons.REFRESH, on_click=update),
+                                ft.TextButton(text="Добавить", on_click=add_note),
                             ],
                         ),
                     ],
@@ -1448,122 +812,91 @@ class RepairShopApp:
             )
         else:
             self.detect_platform()
-            self.home_view()
+            self.page.go("/")
 
         return main_window
 
-    def clients_view(self):
-        return self.table_view("clients")
-
-    def devices_view(self):
-        return self.table_view("devices")
-
-    def device_types_view(self):
-        return self.table_view("device_types")
-
-    def employees_view(self):
-        return self.table_view("employees")
-
-    def order_spare_parts_view(self):
-       return self.table_view("order_spare_parts")
-
-    def order_services_view(self):
-        return self.table_view("order_services")
-
-    def statuses_view(self):
-        return self.table_view("statuses")
-
-    def spare_parts_view(self):
-        return self.table_view("spare_parts")
-
-    def services_view(self):
-        return self.table_view("services")
-
-    def orders_view(self):
-        return self.table_view("orders")
-
-
     def on_close(self,e):
-        self.save_config()
+        self.setting.save_config()
         self.page.window_close()
 
     routing_map = {
         "/": {
-            "function": home_view,
+            "function": lambda self: self.home_view(),
             "view": ft.View(
                 route="/",
             ),
         },
         "/loggin": {
-            "function": loggin_view,
+            "function": lambda self: self.loggin_view(),
             "view": ft.View(
                 route="/setting",
             ),
         },
         "/setting": {
-            "function": setting_view,
+            "function": lambda self: self.setting_view(),
             "view": ft.View(
                 route="/setting",
             ),
         },
-        "/clients": {
-            "function": clients_view,
+        "/tables/clients": {
+            "function": lambda self: self.table_view("clients"),
             "view": ft.View(
-                route="/clients",
+                route="/tables/clients",
             ),
         },
-        "/devices": {
-            "function": devices_view,
+        "/tables/devices": {
+            "function": lambda self: self.table_view("devices"),
             "view": ft.View(
-                route="/devices",
+                route="/tables/devices",
             ),
         },
-        "/device_types": {
-            "function": device_types_view,
+        "/tables/device_types": {
+            "function": lambda self: self.table_view("device_types"),
             "view": ft.View(
-                route="/device_types",
+                route="/tables/device_types",
             ),
         },
-        "/employees": {
-            "function": employees_view,
+        "/tables/employees": {
+            "function": lambda self: self.table_view("employees"),
             "view": ft.View(
-                route="/employees",
+                route="/tables/employees",
             ),
         },
-        "/order_spare_parts": {
-            "function": order_spare_parts_view,
+        "/tables/order_spare_parts": {
+            "function": lambda self: self.table_view("order_spare_parts"),
             "view": ft.View(
-                route="/order_spare_parts",
+                route="/tables/order_spare_parts",
             ),
         },
-        "/order_services": {
-            "function": order_services_view,
+        "/tables/order_services": {
+            "function": lambda self: self.table_view("order_services"),
             "view": ft.View(
-                route="/order_services",
+                route="/tables/order_services",
             ),
         },
-        "/statuses": {
-            "function": statuses_view,
+        "/tables/statuses": {
+            "function": lambda self: self.table_view("statuses"),
             "view": ft.View(
-                route="/statuses",
+                route="/tables/statuses",
             ),
         },
-        "/spare_parts": {
-            "function": spare_parts_view,
+        "/tables/spare_parts": {
+            "function": lambda self: self.table_view("spare_parts"),
             "view": ft.View(
-                route="/spare_parts",
+                route="/tables/spare_parts",
             ),
         },
-        "/services": {
-            "function": services_view,
+        "/tables/services": {
+            "function": lambda self: self.table_view("services"),
             "view": ft.View(
-                route="/services",
+                route="/tables/services",
             ),
         },
-        "/orders": {
-            "function": orders_view,
+        "/tables/orders": {
+            "function": lambda self: self.table_view("orders"),
             "view": ft.View(
-                route="/orders",
+                route="/tables/orders",
             ),
         }
     }
