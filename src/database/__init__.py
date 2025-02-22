@@ -6,6 +6,30 @@ class Manager:
     def __init__(self, connection=None):
         self.connection = connection
 
+    def get_table_row(self, table_name, columns_str="*", primary_keys={}):
+        data = []
+        try:
+            logger.info(f"Формирование запроса к '{table_name}'.")
+            cursor = self.connection.cursor(dictionary=True)
+            where_clause = " AND ".join([f"{key} = %s" for key in primary_keys.keys()])
+            values = tuple(primary_keys.values())
+            query = f"""
+            SELECT {columns_str}
+            FROM {table_name}
+            WHERE {where_clause}
+            """
+            logger.info(f"Отправка запроса к '{table_name}':\n{dedent(query)}\n{values}")
+            cursor.execute(query, values)
+            data = cursor.fetchone()
+            logger.info(f"Ответ от '{table_name}':\n{data}")
+        except mysql.connector.Error as err:
+            logger.error(f"Запрос к таблице '{table_name}' проваленен:{err}.")
+            raise err
+        finally:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            return data
+
     def get_table_rows(self, table_name, columns_str="*", join_tables=[]):
         data = []
         try:
@@ -39,6 +63,7 @@ class Manager:
         try:
             logger.info(f"Формирование запроса для получения PRIMARY KEY таблицы {table_name}.")
             cursor = self.connection.cursor()
+            value = [table_name]
             query = """
             SELECT
             COLUMN_NAME as column_name
@@ -46,9 +71,9 @@ class Manager:
             WHERE TABLE_NAME = %s
               AND COLUMN_KEY IN ('PRI');
             """
-            logger.info(f"Отправка запроса для получения PRIMARY KEY:\n{dedent(query)}")
-            cursor.execute(query, (table_name,))
-            data = list(cursor.fetchall()[0])
+            logger.info(f"Отправка запроса для получения PRIMARY KEY:\n{dedent(query)}\n{value}")
+            cursor.execute(query, value)
+            data = [e[0] for e in cursor.fetchall()]
             logger.info(f"Ответ от запроса для получения PRIMARY KEY:\n{data}")
         except mysql.connector.Error as err:
             logger.error(f"Запрос для получения PRIMARY KEY проваленен:{err}.")
@@ -82,8 +107,9 @@ class Manager:
     def get_table_row_dependens(self, table_name):
         data = []
         try:
-            logger.info(f"Формирование запроса к базе данных за зависимыми записями.")
+            logger.info("Формирование запроса к базе данных за зависимыми записями.")
             cursor = self.connection.cursor(dictionary=True)
+            value = (table_name,)
             query = """
             SELECT     
                 REFERENCED_TABLE_NAME AS referenced_table_name,
@@ -96,17 +122,19 @@ class Manager:
                 TABLE_NAME = %s
                 AND REFERENCED_TABLE_NAME IS NOT NULL;
             """
-            logger.info(f"Отправка основного запроса к '{table_name}':\n{dedent(query)}")
-            cursor.execute(query, (table_name,))
+            logger.info(f"Отправка основного запроса к '{table_name}':\n{dedent(query)}\n{values}")
+            cursor.execute(query, value)
             temp = cursor.fetchall()
+            logger.info(f"Ответ основного запроса от '{table_name}':\n{temp}")
             for row in temp:
                 logger.info(f"Формирование запроса к '{row['referenced_table_name']}'.")
+                value = [row['referenced_table_name']]
                 temp_query = """
                 SELECT *
                 FROM %s
                 """
-                logger.info(f"Отправка запроса к '{table_name}':\n{dedent(query)}")
-                cursor.execute(temp_query, (row['referenced_table_name'],))
+                logger.info(f"Отправка запроса к '{table_name}':\n{dedent(query)}\n{value}")
+                cursor.execute(temp_query, value)
                 data.append({
                         "referenced_table_name": row['referenced_table_name'],
                         "referenced_table_rows": cursor.fetchall(),
@@ -135,7 +163,7 @@ class Manager:
             INSERT INTO {table_name} ({columns})
             VALUES ({placeholders})
             """
-            logger.info(f"Отправка запроса к '{table_name}':\n{dedent(query)}")
+            logger.info(f"Отправка запроса к '{table_name}':\n{dedent(query)}\n{values}")
             cursor.execute(query, values)
             self.connection.commit()
             logger.info(f"Операция успешна")
@@ -159,7 +187,7 @@ class Manager:
             SET {set_row}
             WHERE {where_clause}
             """
-            logger.info(f"Отправка запроса к '{table_name}':\n{dedent(query)}")
+            logger.info(f"Отправка запроса к '{table_name}':\n{dedent(query)}\n{values}")
             cursor.execute(query, values)
             self.connection.commit()
             logger.info(f"Операция успешна")
@@ -181,7 +209,7 @@ class Manager:
             DELETE FROM {table_name}
             WHERE {where_clause}
             """
-            logger.info(f"Отправка запроса к '{table_name}':\n{dedent(query)}")
+            logger.info(f"Отправка запроса к '{table_name}':\n{dedent(query)}\n{values}")
             cursor.execute(query, values)
             self.connection.commit()
             logger.info(f"Операция успешна")
@@ -202,8 +230,8 @@ class Manager:
                 JOIN roles ON users.user_id = roles.role_id
                 WHERE login = %s;
             """
-            value = (login,)
-            logger.info(f"Отправка запроса к таблице пользователей':\n{dedent(query)}")
+            value = [login]
+            logger.info(f"Отправка запроса к таблице пользователей':\n{dedent(query)}\n{value}")
             cursor.execute(query, value)
             data = cursor.fetchone()
             logger.info(f"Ответ от таблицы пользователей:\n{data}")

@@ -29,7 +29,7 @@ AVAILABLE_TABLES = {
         "order_spare_parts",
         "spare_parts",
     ],
-    "Guest":["devices"],
+    "Guest":[],
 }
 AVAILABLE_ROUTES = {
     "Administrator":[
@@ -78,7 +78,6 @@ AVAILABLE_ROUTES = {
         "/",
         "/setting",
         "/loggin",
-        "/tables/devices",
     ],
 }
 CRYPT_KEY = "-KlO432jG5Vm5G24X3gb-2oRX2jsVODPMjW1fu8idzw="

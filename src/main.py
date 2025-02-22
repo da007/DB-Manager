@@ -469,6 +469,9 @@ class RepairShopApp:
         return main_window
 
     def table_view(self, table_name):
+        def get_row(content):
+            controls = content.controls
+            return {control.data:control.value for control in controls}
         def check_row_values(content):
             controls = content.controls
             nessesary_columns_list = list(database.TABLES[table_name]["nessesary_columns"])
@@ -645,12 +648,9 @@ class RepairShopApp:
                     new_row = get_row(content)
                     self.database.manager.add_table_row(table_name, new_row)
                     self.page.close(dialog)
+                    update()
                 else:
                     error_empty(content)
-            def get_row(content):
-                controls = content.controls
-                adding_row = {control.data:control.value for control in controls}
-                return adding_row
             content = ft.Column(
                 scroll=ft.ScrollMode.AUTO,
                 expand = True,
@@ -670,7 +670,6 @@ class RepairShopApp:
                 content.controls.extend(controls)
 
                 self.show_alert_dialog(title="Добавить", content=content, actions=actions, modal=True)
-                update()
             except mysql.connector.Error as err:
                 self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
         def delete_row(e=None,table_name=None, row=None):
@@ -700,17 +699,12 @@ class RepairShopApp:
             def action(dialog, content):
                 is_checked = check_row_values(content)
                 if is_checked:
-                    new_row = get_row(content, row)
+                    new_row = get_row(content)
                     self.database.manager.update_table_row(table_name, new_row)
                     self.page.close(dialog)
+                    update()
                 else:
                     error_empty(content)
-            def get_row(content, row):
-                controls = content.controls
-                new_row = row.copy()
-                for control in controls:
-                    new_row[control.data] = control.value
-                return row
 
             content = ft.Column(
                 scroll=ft.ScrollMode.AUTO,
@@ -721,16 +715,15 @@ class RepairShopApp:
                 ft.TextButton("Применить", on_click=lambda e, a=action: action_button_click(e, a)),
             ]
             try:
-                table_column_names = []
-                for column_name in self.database.manager.get_table_rows(table_name)[0].keys():
-                    table_column_names.append(column_name)
                 primary_columns = self.database.manager.get_primary_columns(table_name)
+                primary_keys = {primary_column: row[primary_column] for primary_column in primary_columns}
+                row = self.database.manager.get_table_row(table_name, primary_keys = primary_keys)
+                table_column_names = row.keys()
                 table_row_dependens = self.database.manager.get_table_row_dependens(table_name)
                 controls = create_controls(row, table_column_names, table_row_dependens, primary_columns)
                 content.controls.extend(controls)
 
                 self.show_alert_dialog(title="Обновить", content=content, actions=actions, modal=True)
-                update()
             except mysql.connector.Error as err:
                 self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
         def update(e=None):
