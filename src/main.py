@@ -38,10 +38,11 @@ class RepairShopApp:
         alert_dialog.content = content
         alert_dialog.actions = actions
         alert_dialog.modal = modal
-        alert_dialog.on_dismiss = self.alert_dialogs_stack_pop
+        #alert_dialog.on_dismiss = self.alert_dialogs_stack_pop
 
-        self.alert_dialogs_stack.append(alert_dialog)
-        self.page.open(self.alert_dialogs_stack[-1])
+        #self.alert_dialogs_stack.append(alert_dialog)
+        #self.page.open(self.alert_dialogs_stack[-1])
+        self.page.open(alert_dialog)
         self.page.update()
 
     def set_color_theme(self):
@@ -127,7 +128,7 @@ class RepairShopApp:
                     ft.IconButton(icon=ft.Icons.REFRESH, on_click=reconnect),
                 ],
                 alignment=ft.MainAxisAlignment.START,
-                vertical_alignment=ft.CrossAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             )
 
         if self.platform == "phone":
@@ -326,6 +327,7 @@ class RepairShopApp:
             self.page.update()
 
         def on_click_connect(e=None):
+            nonlocal setting
             setting = {
                 "host": host_field.value,
                 "user": user_field.value,
@@ -341,14 +343,16 @@ class RepairShopApp:
         def on_click_save(e=None):
             self.setting.app["theme_mode"] = th_m_drop.value
             self.setting.app["theme_color"] = th_c_drop.value
-            self.setting.db["host"] = host_field.value
-            self.setting.db["user"] = user_field.value
-            self.setting.db["password"] = pw_field.value
-            self.setting.db["database"] = db_field.value
-            self.database.connect(self.setting.db)
+            if setting:
+                self.setting.db["host"] = host_field.value
+                self.setting.db["user"] = user_field.value
+                self.setting.db["password"] = pw_field.value
+                self.setting.db["database"] = db_field.value
+                self.database.connect(self.setting.db)
             self.setting.save_config()
             self.page.go("/")
-        
+
+        setting = {}
         host_field = ft.TextField(label = "Host", on_change=on_change_field)
         user_field = ft.TextField(label = "User", on_change=on_change_field)
         pw_field = ft.TextField(label = "Password", on_change=on_change_field, password=True, can_reveal_password=True)
@@ -510,6 +514,7 @@ class RepairShopApp:
                 self.page.close(dialog)
             else:
                 action(dialog, content)
+                self.show_alert_dialog(content=ft.Text("Успешно!"))
             self.page.update()
         def create_controls(row, table_column_names, table_row_dependens, primary_columns=[]):
             controls = []
@@ -517,7 +522,8 @@ class RepairShopApp:
                 control = None
                 is_disabled = table_column_name in primary_columns
                 for table_row_dependen in table_row_dependens:
-                    if table_column_name in table_row_dependen["column_name"]:
+                    print(table_row_dependens)
+                    if table_column_name == table_row_dependen["main_column_name"]:
                         options = []
                         for referenced_table_row in table_row_dependen["referenced_table_rows"]:
                             options.append(ft.dropdown.Option(
@@ -547,7 +553,7 @@ class RepairShopApp:
                     main_table_container_in.scroll_to(offset=e.pixels, delta=e.scroll_delta, duration=0)
 
                 main_columns = [
-                    ft.DataColumn(ft.Text(database.COLUMN_NAMES[key])) for key in table_rows[0].keys()
+                    ft.DataColumn(ft.Text(database.COLUMN_NAMES[column]), data=column) for column in database.TABLES[table_name]["view_columns"]
                 ]
                 last_column = [
                     ft.DataColumn(ft.Text("Действия"))
@@ -558,7 +564,7 @@ class RepairShopApp:
                     main_rows.append(
                         ft.DataRow(
                             cells=[
-                                ft.DataCell(ft.Text(cell)) for cell in row.values()
+                                ft.DataCell(ft.Text(cell)) for cell in [row[column.data] for column in main_columns]
                             ],
                         )
                     )
@@ -584,7 +590,8 @@ class RepairShopApp:
                     controls=[main_table],
                     alignment=ft.MainAxisAlignment.START,
                     horizontal_alignment=ft.CrossAxisAlignment.START,
-                    scroll=ft.ScrollMode.AUTO,
+                    scroll=ft.ScrollMode.HIDDEN,
+                    on_scroll_interval=0,
                 )
                 main_table_container_out = ft.Row(
                     controls=[main_table_container_in],
@@ -603,6 +610,7 @@ class RepairShopApp:
                     alignment=ft.MainAxisAlignment.START,
                     horizontal_alignment=ft.CrossAxisAlignment.START,
                     scroll=ft.ScrollMode.AUTO,
+                    on_scroll_interval=0,
                 )
                 last_table_container.on_scroll = sync_scroll
                 table_container_in = ft.Row(
@@ -621,10 +629,10 @@ class RepairShopApp:
             main_table_container_out = table_container_in.controls[0]
             main_table_container_in = main_table_container_out.controls[0]
             main_table = main_table_container_in.controls[0]
-            main_rows = main_table.rows[:-1]
+            main_rows = main_table.rows
             last_table_container = table_container_in.controls[1]
             last_table = last_table_container.controls[0]
-            last_rows = last_table.rows[:-1]
+            last_rows = last_table.rows
 
             query = e.control.value.lower()
             for main_row, last_row in zip(main_rows, last_rows):
@@ -662,9 +670,9 @@ class RepairShopApp:
             
             try:
                 table_column_names = []
-                for column_name in self.database.manager.get_table_rows(table_name)[0].keys():
-                    if column_name not in database.TABLES[table_name]["passed_columns"]:
-                        table_column_names.append(column_name)
+                for column_name in self.database.manager.get_table_column_names(table_name):
+                    if f"{table_name}.{column_name}" not in database.TABLES[table_name]["passed_columns"]:
+                        table_column_names.append(f"{table_name}.{column_name}")
                 table_row_dependens = self.database.manager.get_table_row_dependens(table_name)
                 controls = create_controls([], table_column_names, table_row_dependens)
                 content.controls.extend(controls)
@@ -674,12 +682,18 @@ class RepairShopApp:
                 self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
         def delete_row(e=None,table_name=None, row=None):
             try:
+                primary_columns = {column:row[column] for column in database.TABLES[table_name]["primary_columns"]}
                 referenced_row_rows = self.database.manager.get_referenced_row_rows(table_name, row)
+                print(referenced_row_rows)
                 if referenced_row_rows:
                     if self.settin.right == "Administrator":
                         actions = [
                             ft.TextButton("Отмена", on_click=action_button_click),
                         ]
+                        content = ft.Column(
+                            scroll=ft.ScrollMode.AUTO,
+                            expand = True,
+                        )
                         for referenced_row_row in referenced_row_rows:
                             referenced_table_name = referenced_row_row["referenced_table_name"]
                             referenced_table_rows = referenced_row_row["referenced_table_rows"]
@@ -691,7 +705,7 @@ class RepairShopApp:
                         ]
                         self.show_alert_dialog(title="Удаление", content=ft.Text("Есть зависимые записи. Удаление не возможно!"), actions=actions, modal=True)
                 else:
-                    self.database.manager.delete_table_rows(table_name, row)
+                    self.database.manager.delete_table_rows(table_name, primary_columns)
                 update()
             except mysql.connector.Error as err:
                 self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
@@ -700,7 +714,7 @@ class RepairShopApp:
                 is_checked = check_row_values(content)
                 if is_checked:
                     new_row = get_row(content)
-                    self.database.manager.update_table_row(table_name, new_row)
+                    self.database.manager.update_table_row(table_name, new_row, primary_columns)
                     self.page.close(dialog)
                     update()
                 else:
@@ -715,10 +729,11 @@ class RepairShopApp:
                 ft.TextButton("Применить", on_click=lambda e, a=action: action_button_click(e, a)),
             ]
             try:
-                primary_columns = self.database.manager.get_primary_columns(table_name)
-                primary_keys = {primary_column: row[primary_column] for primary_column in primary_columns}
-                row = self.database.manager.get_table_row(table_name, primary_keys = primary_keys)
-                table_column_names = row.keys()
+                primary_columns = database.TABLES[table_name]["primary_columns"]
+                table_column_names = []
+                for column_name in row.keys():
+                    if table_name in column_name:
+                        table_column_names.append(column_name)
                 table_row_dependens = self.database.manager.get_table_row_dependens(table_name)
                 controls = create_controls(row, table_column_names, table_row_dependens, primary_columns)
                 content.controls.extend(controls)
@@ -729,7 +744,7 @@ class RepairShopApp:
         def update(e=None):
             try:
                 table_rows = self.database.manager.get_table_rows(
-                    table_name, database.TABLES[table_name]["view_columns"],
+                    table_name,
                     database.TABLES[table_name]["join_tables"]
                 )
                 table_container_out.controls=[create_table(table_name, table_rows)]
@@ -738,7 +753,7 @@ class RepairShopApp:
                 self.show_alert_dialog(content=ft.Text(f"Ошибка при выполнении запроса: {err}"))
             
         table_rows = self.database.manager.get_table_rows(
-            table_name, database.TABLES[table_name]["view_columns"],
+            table_name,
             database.TABLES[table_name]["join_tables"]
         )
         table_container_out=ft.Column(
