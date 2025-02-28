@@ -522,7 +522,6 @@ class RepairShopApp:
                 control = None
                 is_disabled = table_column_name in primary_columns
                 for table_row_dependen in table_row_dependens:
-                    print(table_row_dependens)
                     if table_column_name == table_row_dependen["main_column_name"]:
                         options = []
                         for referenced_table_row in table_row_dependen["referenced_table_rows"]:
@@ -555,10 +554,14 @@ class RepairShopApp:
                 main_columns = [
                     ft.DataColumn(ft.Text(database.COLUMN_NAMES[column]), data=column) for column in database.TABLES[table_name]["view_columns"]
                 ]
+                between_column = [
+                    ft.DataColumn(ft.Text(""))
+                ]
                 last_column = [
                     ft.DataColumn(ft.Text("Действия"))
                 ]
                 main_rows=[]
+                between_rows=[]
                 last_rows=[]
                 for row in table_rows:
                     main_rows.append(
@@ -568,6 +571,7 @@ class RepairShopApp:
                             ],
                         )
                     )
+                    between_rows.append(ft.DataRow(cells=[ft.DataCell(ft.Row(spacing=0))]))
                     last_rows.append(
                         ft.DataRow(
                             cells=[
@@ -576,6 +580,7 @@ class RepairShopApp:
                                             ft.IconButton(icon=ft.Icons.DELETE, on_click=lambda e, t=table_name, r=row: delete_row(e, t, r)),
                                             ft.IconButton(icon=ft.Icons.EDIT, on_click=lambda e, t=table_name, r=row: change_row(e, t, r)),
                                         ],
+                                        spacing=0,
                                     )
                                 )
                             ]
@@ -585,25 +590,33 @@ class RepairShopApp:
                     columns=main_columns,
                     rows=main_rows,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE,
-                )
-                main_table_container_in = ft.Column(
-                    controls=[main_table],
-                    alignment=ft.MainAxisAlignment.START,
-                    horizontal_alignment=ft.CrossAxisAlignment.START,
-                    scroll=ft.ScrollMode.HIDDEN,
-                    on_scroll_interval=0,
-                )
-                main_table_container_out = ft.Row(
-                    controls=[main_table_container_in],
-                    alignment=ft.MainAxisAlignment.START,
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                    expand=True,
-                    scroll=ft.ScrollMode.AUTO,
-                )
+                )                
+                between_table = ft.DataTable(
+                    columns=between_column,
+                    rows=between_rows,
+                    clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                )                
                 last_table = ft.DataTable(
                     columns=last_column,
                     rows=last_rows,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                )
+                main_table_container_in = ft.Column(
+                    controls=[main_table],
+                    alignment=ft.MainAxisAlignment.START,
+                    scroll=ft.ScrollMode.HIDDEN,
+                    on_scroll_interval=0,
+                    expand=True,
+                )
+                main_table_container_out = ft.Row(
+                    controls=[main_table_container_in],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                )
+                between_table_container = ft.Column(
+                    controls=[between_table],
+                    on_scroll_interval=0,
+                    expand=True,
                 )
                 last_table_container = ft.Column(
                     controls=[last_table],
@@ -622,6 +635,7 @@ class RepairShopApp:
                     vertical_alignment=ft.CrossAxisAlignment.START,
                     expand=True,
                     spacing=0,
+                    scroll=ft.ScrollMode.AUTO,
                 )
             return table_container_in
         def search_data(e=None):
@@ -684,7 +698,6 @@ class RepairShopApp:
             try:
                 primary_columns = {column:row[column] for column in database.TABLES[table_name]["primary_columns"]}
                 referenced_row_rows = self.database.manager.get_referenced_row_rows(table_name, row)
-                print(referenced_row_rows)
                 if referenced_row_rows:
                     if self.settin.right == "Administrator":
                         actions = [
@@ -812,7 +825,6 @@ class RepairShopApp:
                     horizontal_alignment = ft.CrossAxisAlignment.START,
                 ),
                 table_container_out,
-                ft.Row(),
                 ],
                 expand = True,
                 alignment = ft.MainAxisAlignment.START,

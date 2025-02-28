@@ -102,6 +102,7 @@ COLUMN_NAMES = {
     'services.service_name': 'Название услуги',
     'services.price': 'Цена',
     'services.is_hardware': 'Аппаратное',
+    'services.description': 'Описание',
     'device_types.type_name': 'Тип устройства',
     'statuses.status_name': 'Название статуса',
     'order_spare_parts.order_id': 'ID заказа (запчасти)',  

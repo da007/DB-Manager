@@ -207,7 +207,7 @@ class Manager:
             cursor = self.connection.cursor()
             query = """
             SELECT role_name, password_hash FROM users
-                JOIN roles ON users.user_id = roles.role_id
+                JOIN roles ON users.role_id = roles.role_id
                 WHERE login = %s;
             """
             value = [login]
